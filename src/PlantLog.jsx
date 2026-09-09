@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 
 const GROUPS = [
   { id: "seed-planters", name: "Seed planters", latin: "wildflower mixes", aka: "Save the Bees + Bring Home the Butterflies", detail: "3 troughs on the patio, sown 8/30/26", interval: 1, water: "tap", check: "surface must never dry out — reseed round" },
+  { id: "venus-flytrap", name: "Venus flytrap", latin: "Dionaea muscipula", aka: "flytrap", detail: "terrarium cup, patio", interval: 2, water: "distilled", check: "keep soil damp — stand the cup in 1/2 inch of distilled water" },
   { id: "sweet-potato-vine", name: "Sweet potato vine", latin: "Ipomoea batatas", aka: "ornamental sweet potato, tuber vine", detail: "potted, patio", interval: 2, water: "tap", check: "top 1 inch dry — wilts fast, recovers fast" },
   { id: "outdoor-spiders", name: "Outdoor spider plants", latin: "Chlorophytum comosum", aka: "airplane plant, ribbon plant", detail: "2 pots on the patio", interval: 4, water: "tap", check: "top 1 inch dry" },
   { id: "calathea", name: "Calathea", latin: "Calathea roseopicta", aka: "prayer plant, medallion", detail: "on the bar cabinet", interval: 6, water: "filtered", check: "top 1 inch dry" },
@@ -322,7 +323,13 @@ export default function PlantLog() {
                   <span className="pl-dot">·</span>
                   <span>every {r.interval} days</span>
                   <span className="pl-dot">·</span>
-                  <span className="pl-water">{r.water === "filtered" ? "filtered water only" : r.water === "hose" ? "hose, deep soak" : "tap is fine"}</span>
+                  <span className={r.water === "distilled" ? "pl-water pl-warn" : "pl-water"}>{r.water === "distilled"
+                      ? "DISTILLED OR RAINWATER ONLY — tap water kills it"
+                      : r.water === "filtered"
+                      ? "filtered water only"
+                      : r.water === "hose"
+                      ? "hose, deep soak"
+                      : "tap is fine"}</span>
                 </div>
 
                 <p className="pl-check">Check: {r.check}</p>
@@ -588,6 +595,7 @@ function Style() {
       }
       .pl-dot { color: ${PALETTE.panelEdge}; }
       .pl-water { color: ${PALETTE.fresh}; }
+      .pl-warn { color: ${PALETTE.parch}; font-weight: 600; }
       .pl-check { font-size: 15px; line-height: 1.5; color: ${PALETTE.quiet}; margin: 10px 0 0; }
       .pl-timer {
         margin-top: 12px; padding: 10px 12px; border-radius: 10px;
