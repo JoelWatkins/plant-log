@@ -4,12 +4,12 @@ const GROUPS = [
   { id: "seed-planters", name: "Seed planters", latin: "wildflower mixes", aka: "Save the Bees + Bring Home the Butterflies", detail: "3 troughs on the patio, sown 8/30/26", interval: 1, water: "tap", check: "surface must never dry out — reseed round" },
   { id: "venus-flytrap", name: "Venus flytrap", latin: "Dionaea muscipula", aka: "flytrap", detail: "terrarium cup, patio", interval: 2, water: "distilled", check: "keep soil damp — stand the cup in 1/2 inch of distilled water" },
   { id: "sweet-potato-vine", name: "Sweet potato vine", latin: "Ipomoea batatas", aka: "ornamental sweet potato, tuber vine", detail: "potted, patio", interval: 2, water: "tap", check: "top 1 inch dry — wilts fast, recovers fast" },
-  { id: "outdoor-spiders", name: "Outdoor spider plants", latin: "Chlorophytum comosum", aka: "airplane plant, ribbon plant", detail: "2 pots on the patio", interval: 4, water: "tap", check: "top 1 inch dry" },
-  { id: "calathea", name: "Calathea", latin: "Calathea roseopicta", aka: "prayer plant, medallion", detail: "on the bar cabinet", interval: 6, water: "filtered", check: "top 1 inch dry" },
-  { id: "tradescantia", name: "Tradescantia", latin: "Tradescantia zebrina", aka: "wandering dude, inch plant, silver inch", detail: "hanging, bedroom", interval: 6, water: "tap", check: "top 1 inch dry — bottom-soak the pot 30 min, then drain fully", soak: 1800 },
-  { id: "spider-indoor", name: "Curly spider plant", latin: "Chlorophytum comosum 'Bonnie'", aka: "spider ivy, airplane plant", detail: "hanging, bedroom window", interval: 8, water: "filtered", check: "top 1 inch dry" },
+  { id: "outdoor-spiders", name: "Outdoor spider plants", latin: "Chlorophytum comosum", aka: "airplane plant, ribbon plant", detail: "2 pots on the patio", interval: 4, water: "tap", check: "top 1 inch dry — bottom-soak 30 min if the soil repels water", soak: 1800, flushEvery: 5 },
+  { id: "calathea", name: "Calathea", latin: "Calathea roseopicta", aka: "prayer plant, medallion", detail: "on the bar cabinet", interval: 6, water: "filtered", check: "top 1 inch dry — bottom-soak 20 min, then drain fully", soak: 1200, flushEvery: 4 },
+  { id: "tradescantia", name: "Tradescantia", latin: "Tradescantia zebrina", aka: "wandering dude, inch plant, silver inch", detail: "hanging, bedroom", interval: 6, water: "tap", check: "top 1 inch dry — bottom-soak the pot 30 min, then drain fully", soak: 1800, flushEvery: 5 },
+  { id: "spider-indoor", name: "Curly spider plant", latin: "Chlorophytum comosum 'Bonnie'", aka: "spider ivy, airplane plant", detail: "hanging, bedroom window", interval: 8, water: "filtered", check: "top 1 inch dry — bottom-soak 20 min, then drain fully", soak: 1200, flushEvery: 4 },
   { id: "money-tree", name: "Money tree", latin: "Pachira aquatica", aka: "Malabar chestnut, braided money plant", detail: "office window", interval: 12, water: "tap", check: "top 2 inches dry" },
-  { id: "string-of-hearts", name: "String of hearts", latin: "Ceropegia woodii", aka: "rosary vine, chain of hearts", detail: "hanging, bedroom", interval: 12, water: "tap", check: "bone dry, then wait a day" },
+  { id: "string-of-hearts", name: "String of hearts", latin: "Ceropegia woodii", aka: "rosary vine, chain of hearts", detail: "hanging, bedroom", interval: 12, water: "tap", check: "bone dry, then wait a day — bottom-soak 15 min, drain well", soak: 900, flushEvery: 5 },
   { id: "citrus", name: "Citrus trees", latin: "Citrus × limon, Citrus × sinensis", aka: "the lemon and the orange", detail: "back fence", interval: 14, water: "hose", check: "deep soak at the drip line, 30 min", soak: 1800 },
 ];
 
@@ -251,7 +251,14 @@ export default function PlantLog() {
     const last = history[0];
     const since = last ? daysBetween(last.date, today) : null;
     const remaining = since === null ? -1 : g.interval - since;
-    return { ...g, history, last, since, remaining };
+    // Bottom-watering concentrates minerals, so every Nth round is a top flush.
+    const nextIsFlush = g.flushEvery
+      ? (history.length + 1) % g.flushEvery === 0
+      : false;
+    const untilFlush = g.flushEvery
+      ? g.flushEvery - ((history.length + 1) % g.flushEvery || g.flushEvery)
+      : null;
+    return { ...g, history, last, since, remaining, nextIsFlush, untilFlush };
   }).sort((a, b) => a.remaining - b.remaining);
 
   const dueCount = rows.filter((r) => r.remaining <= 0).length;
@@ -334,8 +341,23 @@ export default function PlantLog() {
 
                 <p className="pl-check">Check: {r.check}</p>
 
-                {r.soak && (
+                {r.flushEvery && (
+                  r.nextIsFlush ? (
+                    <p className="pl-flush">
+                      Flush this round — top-water thoroughly until it runs out the
+                      bottom, and skip the soak. Clears mineral buildup.
+                    </p>
+                  ) : (
+                    <p className="pl-flushSoon">
+                      Top flush due in {r.untilFlush === 0 ? "1" : r.untilFlush + 1}{" "}
+                      {r.untilFlush === 0 ? "watering" : "waterings"}
+                    </p>
+                  )
+                )}
+
+                {r.soak && !r.nextIsFlush && (
                   <SoakTimer
+                    id={r.id}
                     seconds={r.soak}
                     label={`${Math.round(r.soak / 60)}-minute soak`}
                   />
@@ -451,51 +473,141 @@ function Backdate({ today, existing, onAdd }) {
   );
 }
 
-function SoakTimer({ seconds, label }) {
+function SoakTimer({ seconds, label, id }) {
+  const [deadline, setDeadline] = useState(null);
   const [left, setLeft] = useState(seconds);
-  const [running, setRunning] = useState(false);
+  const [rang, setRang] = useState(false);
 
+  const storeKey = `soak:${id}`;
+
+  // Restore a soak that was running when the app was closed or backgrounded.
   useEffect(() => {
-    if (!running) return;
-    const t = setInterval(() => {
-      setLeft((v) => {
-        if (v <= 1) {
-          clearInterval(t);
-          setRunning(false);
-          return 0;
-        }
-        return v - 1;
+    try {
+      const saved = localStorage.getItem(storeKey);
+      if (saved) {
+        const at = Number(saved);
+        if (at > Date.now()) setDeadline(at);
+        else localStorage.removeItem(storeKey);
+      }
+    } catch {
+      /* storage unavailable */
+    }
+  }, [storeKey]);
+
+  // Derive remaining time from a fixed end time, so background throttling
+  // and a locked screen don't slow the countdown down.
+  useEffect(() => {
+    if (!deadline) return;
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      setLeft(remaining);
+      if (remaining === 0) setRang(true);
+    };
+    tick();
+    const t = setInterval(tick, 250);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, [deadline]);
+
+  // Alert when it lands: vibrate, then a short tone pair.
+  useEffect(() => {
+    if (!rang) return;
+    try {
+      localStorage.removeItem(storeKey);
+    } catch {
+      /* ignore */
+    }
+    try {
+      if (navigator.vibrate) navigator.vibrate([400, 200, 400, 200, 600]);
+    } catch {
+      /* vibration unsupported */
+    }
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      const beep = (at, freq) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.value = freq;
+        osc.type = "sine";
+        gain.gain.setValueAtTime(0.0001, ctx.currentTime + at);
+        gain.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime + at + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + at + 0.5);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(ctx.currentTime + at);
+        osc.stop(ctx.currentTime + at + 0.55);
+      };
+      [0, 0.7, 1.4].forEach((at) => {
+        beep(at, 880);
+        beep(at + 0.25, 660);
       });
-    }, 1000);
-    return () => clearInterval(t);
-  }, [running]);
+      setTimeout(() => ctx.close(), 3000);
+    } catch {
+      /* audio blocked */
+    }
+  }, [rang, storeKey]);
+
+  const start = () => {
+    const at = Date.now() + seconds * 1000;
+    setDeadline(at);
+    setRang(false);
+    try {
+      localStorage.setItem(storeKey, String(at));
+    } catch {
+      /* ignore */
+    }
+    // Unlock audio on this user gesture so the alert can play later.
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (Ctx) {
+        const ctx = new Ctx();
+        if (ctx.state === "suspended") ctx.resume();
+        setTimeout(() => ctx.close(), 500);
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const reset = () => {
+    setDeadline(null);
+    setLeft(seconds);
+    setRang(false);
+    try {
+      localStorage.removeItem(storeKey);
+    } catch {
+      /* ignore */
+    }
+  };
 
   const mm = String(Math.floor(left / 60)).padStart(2, "0");
   const ss = String(left % 60).padStart(2, "0");
-  const done = left === 0;
+  const done = deadline !== null && left === 0;
+  const running = deadline !== null && left > 0;
 
   return (
     <div className="pl-timer">
       <div>
-        <p className="pl-timerLabel">{done ? "Soak done — drain the pot fully" : label}</p>
+        <p className="pl-timerLabel">
+          {done ? "Soak done — drain the pot fully" : label}
+        </p>
         <p className={done ? "pl-clock pl-clockDone" : "pl-clock"}>
           {mm}:{ss}
         </p>
+        {running && <p className="pl-timerHint">Keeps counting if you lock the screen</p>}
       </div>
       <div className="pl-timerBtns">
-        {!done && (
-          <button className="pl-ghost" onClick={() => setRunning(!running)}>
-            {running ? "Pause" : left === seconds ? "Start soak" : "Resume"}
+        {!running && !done && (
+          <button className="pl-ghost" onClick={start}>
+            Start soak
           </button>
         )}
-        {(done || left !== seconds) && (
-          <button
-            className="pl-ghost"
-            onClick={() => {
-              setRunning(false);
-              setLeft(seconds);
-            }}
-          >
+        {(running || done) && (
+          <button className="pl-ghost" onClick={reset}>
             Reset
           </button>
         )}
@@ -597,6 +709,12 @@ function Style() {
       .pl-water { color: ${PALETTE.fresh}; }
       .pl-warn { color: ${PALETTE.parch}; font-weight: 600; }
       .pl-check { font-size: 15px; line-height: 1.5; color: ${PALETTE.quiet}; margin: 10px 0 0; }
+      .pl-flush {
+        font-size: 14.5px; line-height: 1.5; color: ${PALETTE.parch};
+        border-left: 2px solid ${PALETTE.parch}; padding-left: 10px;
+        margin: 10px 0 0;
+      }
+      .pl-flushSoon { font-size: 13.5px; color: ${PALETTE.quiet}; margin: 8px 0 0; }
       .pl-timer {
         margin-top: 12px; padding: 10px 12px; border-radius: 10px;
         background: #0F211E; border: 1px solid ${PALETTE.panelEdge};
@@ -609,6 +727,7 @@ function Style() {
       }
       .pl-clockDone { color: ${PALETTE.fresh}; }
       .pl-timerBtns { display: flex; gap: 6px; flex-shrink: 0; }
+      .pl-timerHint { font-size: 12px; color: ${PALETTE.quiet}; margin: 4px 0 0; }
       .pl-timerBtns .pl-ghost { padding: 11px 12px; font-size: 14px; }
       .pl-actions { display: flex; gap: 8px; margin-top: 14px; }
       .pl-primary {
