@@ -1,16 +1,22 @@
 import React, { useState, useEffect } from "react";
 
 const GROUPS = [
-  { id: "seed-planters", name: "Seed planters", latin: "wildflower mixes", aka: "Save the Bees + Bring Home the Butterflies", detail: "3 troughs on the patio, sown 8/30/26", interval: 1, water: "tap", check: "surface must never dry out — reseed round" },
-  { id: "venus-flytrap", name: "Venus flytrap", latin: "Dionaea muscipula", aka: "flytrap", detail: "terrarium cup, patio", interval: 2, water: "distilled", check: "keep soil damp — stand the cup in 1/2 inch of distilled water" },
-  { id: "sweet-potato-vine", name: "Sweet potato vine", latin: "Ipomoea batatas", aka: "ornamental sweet potato, tuber vine", detail: "potted, patio", interval: 2, water: "tap", check: "top 1 inch dry — wilts fast, recovers fast" },
+  { id: "seed-planters", name: "Seed planters", latin: "wildflower mixes", aka: "Save the Bees + Bring Home the Butterflies", detail: "3 troughs on the patio, sown 8/30/26", coolNote: "Seedlings should be established now — they no longer need the daily surface watering.", interval: 1, water: "tap", check: "surface must never dry out — reseed round" },
+  { id: "venus-flytrap", name: "Venus flytrap", latin: "Dionaea muscipula", aka: "flytrap", detail: "terrarium cup, patio", coolNote: "Dormant Nov–Feb: keep barely damp, not standing in water, and leave it outdoors for the cold.", interval: 2, water: "distilled", check: "keep soil damp — stand the cup in 1/2 inch of distilled water" },
+  { id: "sweet-potato-vine", name: "Sweet potato vine", latin: "Ipomoea batatas", aka: "ornamental sweet potato, tuber vine", detail: "potted, patio", coolNote: "Collapses at the first cold snap. That is normal, not a watering failure.", interval: 2, water: "tap", check: "top 1 inch dry — wilts fast, recovers fast" },
+  { id: "fuchsia", name: "Fuchsia + ivy", latin: "Fuchsia sp. with Hedera helix", aka: "lady's eardrops, English ivy", detail: "sharing one pot", interval: [2, 3], water: "tap", check: "never let it dry out — water for the fuchsia, the ivy will cope" },
   { id: "outdoor-spiders", name: "Outdoor spider plants", latin: "Chlorophytum comosum", aka: "airplane plant, ribbon plant", detail: "2 pots on the patio", interval: 4, water: "tap", check: "top 1 inch dry — top-water until it runs out the bottom" },
-  { id: "calathea", name: "Calathea", latin: "Calathea roseopicta", aka: "prayer plant, medallion", detail: "on the bar cabinet", interval: 6, water: "filtered", check: "top 1 inch dry — bottom-soak 20 min, then drain fully", soak: 1200, flushEvery: 4 },
   { id: "tradescantia", name: "Tradescantia", latin: "Tradescantia zebrina", aka: "wandering dude, inch plant, silver inch", detail: "hanging, bedroom", interval: 6, water: "tap", check: "top 1 inch dry — bottom-soak the pot 30 min, then drain fully", soak: 1800, flushEvery: 5 },
   { id: "spider-indoor", name: "Curly spider plant", latin: "Chlorophytum comosum 'Bonnie'", aka: "spider ivy, airplane plant", detail: "hanging, bedroom window", interval: 8, water: "filtered", check: "top 1 inch dry — bottom-soak 20 min, then drain fully", soak: 1200, flushEvery: 4 },
   { id: "money-tree", name: "Money tree", latin: "Pachira aquatica", aka: "Malabar chestnut, braided money plant", detail: "office window", interval: 12, water: "tap", check: "top 2 inches dry" },
   { id: "string-of-hearts", name: "String of hearts", latin: "Ceropegia woodii", aka: "rosary vine, chain of hearts", detail: "hanging, bedroom", interval: 12, water: "tap", check: "bone dry, then wait a day — bottom-soak 15 min, drain well", soak: 900, flushEvery: 5 },
-  { id: "citrus", name: "Citrus trees", latin: "Citrus × limon, Citrus × sinensis", aka: "the lemon and the orange", detail: "back fence", interval: 14, water: "hose", check: "deep soak at the drip line, 30 min", soak: 1800 },
+  { id: "citrus", name: "Citrus trees", latin: "Citrus × limon, Citrus × sinensis", aka: "the lemon and the orange", detail: "back fence", coolNote: "Once winter rains are steady, stop watering entirely — overwatering is the main way established citrus dies.", interval: 14, water: "hose", check: "deep soak at the drip line, 30 min", soak: 1800 },
+];
+
+const SEASONS = [
+  { id: "summer", label: "Summer", mult: 1 },
+  { id: "fall", label: "Fall", mult: 1.5 },
+  { id: "winter", label: "Winter", mult: 2 },
 ];
 
 const PALETTE = {
@@ -65,6 +71,37 @@ const hasStorage = () => typeof fetch === "function";
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Short physical confirmation that a tap registered.
+function confirmBlip(kind) {
+  try {
+    if (navigator.vibrate) navigator.vibrate(kind === "watered" ? [35, 60, 35] : 30);
+  } catch {
+    /* no vibration */
+  }
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const notes = kind === "watered" ? [660, 880] : [520];
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const at = ctx.currentTime + i * 0.12;
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.exponentialRampToValueAtTime(0.18, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.22);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(at);
+      osc.stop(at + 0.25);
+    });
+    setTimeout(() => ctx.close(), 800);
+  } catch {
+    /* audio blocked */
+  }
+}
+
 async function withRetry(fn, tries = 3) {
   let lastErr;
   for (let i = 0; i < tries; i++) {
@@ -92,6 +129,15 @@ export default function PlantLog() {
   const [offline, setOffline] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [today, setToday] = useState(dateKey());
+  const [season, setSeason] = useState("summer");
+  // After a tap, hold the list order and show a confirmation, so the card you
+  // touched doesn't vanish out from under your finger as the list re-sorts.
+  const [flash, setFlash] = useState(null);
+  const [frozenOrder, setFrozenOrder] = useState(null);
+  const orderRef = React.useRef([]);
+  const flashTimer = React.useRef(null);
+
+  useEffect(() => () => clearTimeout(flashTimer.current), []);
 
   // Pull in other people's waterings periodically and on refocus, so two
   // housemates with the app open don't work from stale counts.
@@ -102,6 +148,7 @@ export default function PlantLog() {
       try {
         const fresh = await api.get();
         if (!cancelled) {
+          if (fresh && fresh._season) setSeason(fresh._season);
           setLog(fresh || {});
           setOffline(false);
         }
@@ -148,6 +195,7 @@ export default function PlantLog() {
         entries = {};
         setOffline(true);
       }
+      if (entries && entries._season) setSeason(entries._season);
       setLog(entries || {});
       try {
         const w = localStorage.getItem("plant-log-who");
@@ -190,10 +238,26 @@ export default function PlantLog() {
     }
   }
 
+  async function logCheck(groupId) {
+    const next = { ...log };
+    const prior = (next[groupId] || []).filter(
+      (e) => !(e.checked && e.date === today)
+    );
+    confirmAction(groupId, "checked");
+    next[groupId] = [{ date: today, by: who, checked: true }, ...prior]
+      .sort((a, b) => (a.date < b.date ? 1 : -1))
+      .slice(0, 60);
+    setLog(next);
+    await persist(next);
+  }
+
   async function logWatering(groupId, when) {
+    if (!when) confirmAction(groupId, "watered");
     const stamp = { date: when || today, by: who };
     const next = { ...log };
-    const prior = (next[groupId] || []).filter((e) => e.date !== stamp.date);
+    const prior = (next[groupId] || []).filter(
+      (e) => !(e.date === stamp.date && !e.checked) && !(e.checked && e.date === stamp.date)
+    );
     next[groupId] = [stamp, ...prior]
       .sort((a, b) => (a.date < b.date ? 1 : -1))
       .slice(0, 40);
@@ -203,7 +267,36 @@ export default function PlantLog() {
 
   async function undo(groupId, date) {
     const next = { ...log };
-    next[groupId] = (next[groupId] || []).filter((e) => e.date !== date);
+    next[groupId] = (next[groupId] || []).filter(
+      (e) => !(e.date === date && !e.checked)
+    );
+    setLog(next);
+    await persist(next);
+  }
+
+  async function undoEntry(groupId, entry) {
+    const next = { ...log };
+    next[groupId] = (next[groupId] || []).filter(
+      (e) => !(e.date === entry.date && !!e.checked === !!entry.checked)
+    );
+    setLog(next);
+    await persist(next);
+  }
+
+  function confirmAction(groupId, kind) {
+    setFrozenOrder(orderRef.current);
+    setFlash({ id: groupId, kind });
+    confirmBlip(kind);
+    clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => {
+      setFlash(null);
+      setFrozenOrder(null);
+    }, 2600);
+  }
+
+  async function chooseSeason(id) {
+    setSeason(id);
+    const next = { ...log, _season: id };
     setLog(next);
     await persist(next);
   }
@@ -246,11 +339,23 @@ export default function PlantLog() {
     );
   }
 
+  const mult = (SEASONS.find((x) => x.id === season) || SEASONS[0]).mult;
+
   const rows = GROUPS.map((g) => {
-    const history = log[g.id] || [];
+    const all = log[g.id] || [];
+    // A check-in records that someone looked and the soil was still damp.
+    // It never resets the watering clock or advances the flush count.
+    const history = all.filter((e) => !e.checked);
+    const checks = all.filter((e) => e.checked);
+    const lastCheck = checks[0];
+    const checkedToday = lastCheck && lastCheck.date === today;
     const last = history[0];
     const since = last ? daysBetween(last.date, today) : null;
-    const remaining = since === null ? -1 : g.interval - since;
+    // An interval can be a single number or a repeating cycle, e.g. [2, 3].
+    const cycle = Array.isArray(g.interval) ? g.interval : [g.interval];
+    const base = cycle[history.length % cycle.length];
+    const interval = Math.max(1, Math.round(base * mult));
+    const remaining = since === null ? -1 : interval - since;
     // Bottom-watering concentrates minerals, so every Nth round is a top flush.
     const nextIsFlush = g.flushEvery
       ? (history.length + 1) % g.flushEvery === 0
@@ -258,8 +363,19 @@ export default function PlantLog() {
     const untilFlush = g.flushEvery
       ? g.flushEvery - ((history.length + 1) % g.flushEvery || g.flushEvery)
       : null;
-    return { ...g, history, last, since, remaining, nextIsFlush, untilFlush };
+    return {
+      ...g, history, all, last, since, remaining, nextIsFlush, untilFlush,
+      interval, cycle, base, lastCheck, checkedToday,
+    };
   }).sort((a, b) => a.remaining - b.remaining);
+
+  // Remember the natural order for the next tap, then apply the frozen one.
+  orderRef.current = rows.map((r) => r.id);
+  const display = frozenOrder
+    ? [...rows].sort(
+        (a, b) => frozenOrder.indexOf(a.id) - frozenOrder.indexOf(b.id)
+      )
+    : rows;
 
   const dueCount = rows.filter((r) => r.remaining <= 0).length;
 
@@ -279,6 +395,23 @@ export default function PlantLog() {
           </p>
         </header>
 
+        <div className="pl-seasons" role="group" aria-label="Season">
+          {SEASONS.map((x) => (
+            <button
+              key={x.id}
+              className={x.id === season ? "pl-season pl-seasonOn" : "pl-season"}
+              onClick={() => chooseSeason(x.id)}
+            >
+              {x.label}
+            </button>
+          ))}
+        </div>
+        {season !== "summer" && (
+          <p className="pl-seasonNote">
+            Intervals stretched {mult}× for {season}. Everyone sees this setting.
+          </p>
+        )}
+
         {offline && (
           <div className="pl-status">
             <p className="pl-statusText">
@@ -293,12 +426,24 @@ export default function PlantLog() {
         {!offline && status && <p className="pl-status">{status}</p>}
 
         <div className="pl-list">
-          {rows.map((r) => {
-            const pct = r.since === null ? 0 : Math.max(0, Math.min(1, 1 - r.since / r.interval));
-            const tone = r.remaining <= 0 ? PALETTE.dry : pct < 0.35 ? PALETTE.parch : PALETTE.moss;
+          {display.map((r) => {
+            const pct =
+              r.since === null ? 0 : Math.max(0, Math.min(1, 1 - r.since / r.interval));
+            const tone =
+              r.checkedToday && r.remaining <= 0
+                ? PALETTE.moss
+                : r.remaining <= 0
+                ? PALETTE.dry
+                : pct < 0.35
+                ? PALETTE.parch
+                : PALETTE.moss;
             const wateredToday = r.last && r.last.date === today;
+            const flashing = flash && flash.id === r.id;
             return (
-              <section key={r.id} className="pl-card">
+              <section
+                key={r.id}
+                className={flashing ? "pl-card pl-cardFlash" : "pl-card"}
+              >
                 <div className="pl-cardTop">
                   <div>
                     <h2 className="pl-name">{r.name}</h2>
@@ -307,7 +452,9 @@ export default function PlantLog() {
                     <p className="pl-detail">{r.detail}</p>
                   </div>
                   <span className="pl-tag" style={{ color: tone, borderColor: tone }}>
-                    {r.since === null
+                    {r.checkedToday && r.remaining <= 0
+                      ? "checked today"
+                      : r.since === null
                       ? "no record"
                       : r.remaining > 0
                       ? `${r.remaining}d left`
@@ -328,7 +475,11 @@ export default function PlantLog() {
                       : "Never logged"}
                   </span>
                   <span className="pl-dot">·</span>
-                  <span>every {r.interval} days</span>
+                  <span>
+                    {r.cycle.length > 1
+                      ? `every ${r.cycle.join("–")} days (${r.interval} this round)`
+                      : `every ${r.interval} days`}
+                  </span>
                   <span className="pl-dot">·</span>
                   <span className={r.water === "distilled" ? "pl-water pl-warn" : "pl-water"}>{r.water === "distilled"
                       ? "DISTILLED OR RAINWATER ONLY — tap water kills it"
@@ -339,7 +490,19 @@ export default function PlantLog() {
                       : "tap is fine"}</span>
                 </div>
 
+                {r.lastCheck && (
+                  <p className="pl-checkedLine">
+                    {r.checkedToday
+                      ? `Checked today by ${r.lastCheck.by || "someone"} — soil still damp`
+                      : `Last checked ${fmt(r.lastCheck.date)} by ${r.lastCheck.by || "someone"}`}
+                  </p>
+                )}
+
                 <p className="pl-check">Check: {r.check}</p>
+
+                {r.coolNote && season !== "summer" && (
+                  <p className="pl-coolNote">{r.coolNote}</p>
+                )}
 
                 {r.flushEvery && (
                   r.nextIsFlush ? (
@@ -363,6 +526,16 @@ export default function PlantLog() {
                   />
                 )}
 
+                {flashing ? (
+                  <div className="pl-confirm" role="status">
+                    <span className="pl-confirmMark">✓</span>
+                    <span>
+                      {flash.kind === "watered"
+                        ? `Watered — logged for ${who}`
+                        : `Checked — noted as still damp`}
+                    </span>
+                  </div>
+                ) : (
                 <div className="pl-actions">
                   <button
                     className={wateredToday ? "pl-done" : "pl-primary"}
@@ -370,10 +543,20 @@ export default function PlantLog() {
                   >
                     {wateredToday ? `Watered today by ${r.last.by || "someone"} — undo` : "I watered this"}
                   </button>
+                  {!wateredToday && (
+                    <button
+                      className="pl-ghost"
+                      onClick={() => logCheck(r.id)}
+                      disabled={r.checkedToday}
+                    >
+                      {r.checkedToday ? "Still damp ✓" : "Still damp"}
+                    </button>
+                  )}
                   <button className="pl-ghost" onClick={() => setOpen(open === r.id ? null : r.id)}>
                     {open === r.id ? "Hide history" : "History"}
                   </button>
                 </div>
+                )}
 
                 {open === r.id && (
                   <div className="pl-history">
@@ -387,14 +570,17 @@ export default function PlantLog() {
                       <p className="pl-empty">Nothing logged yet. The first watering you record starts the clock.</p>
                     ) : (
                       <ul className="pl-entries">
-                        {r.history.slice(0, 8).map((e) => (
-                          <li key={e.date}>
-                            <span>{fmt(e.date)}</span>
+                        {r.all.slice(0, 10).map((e) => (
+                          <li key={`${e.date}-${e.checked ? "c" : "w"}`}>
+                            <span>
+                              {fmt(e.date)}
+                              {e.checked && <span className="pl-tagSmall">checked</span>}
+                            </span>
                             <span className="pl-entryRight">
                               <span className="pl-by">{e.by || "unsigned"}</span>
                               <button
                                 className="pl-remove"
-                                onClick={() => undo(r.id, e.date)}
+                                onClick={() => undoEntry(r.id, e)}
                                 aria-label={`Remove the ${fmt(e.date)} entry`}
                               >
                                 ×
@@ -714,6 +900,61 @@ function Style() {
         border-left: 2px solid ${PALETTE.parch}; padding-left: 10px;
         margin: 10px 0 0;
       }
+      .pl-cardFlash {
+        border-color: ${PALETTE.moss};
+        animation: plFlash 2.6s ease-out;
+      }
+      @keyframes plFlash {
+        0%   { background: ${PALETTE.moss}; }
+        12%  { background: #1C4536; }
+        100% { background: ${PALETTE.panel}; }
+      }
+      .pl-confirm {
+        display: flex; align-items: center; gap: 10px;
+        margin-top: 14px; padding: 15px 16px; min-height: 50px;
+        border-radius: 10px; box-sizing: border-box;
+        background: #16362B; border: 1px solid ${PALETTE.moss};
+        color: ${PALETTE.fresh}; font-size: 15.5px; font-weight: 600;
+        animation: plConfirmIn 220ms ease-out;
+      }
+      @keyframes plConfirmIn {
+        from { opacity: 0; transform: translateY(4px); }
+        to   { opacity: 1; transform: none; }
+      }
+      .pl-confirmMark {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 26px; height: 26px; flex-shrink: 0; border-radius: 999px;
+        background: ${PALETTE.moss}; color: #06110E; font-size: 16px;
+      }
+      .pl-seasons {
+        max-width: 620px; margin: 0 auto 10px; display: flex; gap: 6px;
+      }
+      .pl-season {
+        flex: 1; background: ${PALETTE.panel}; color: ${PALETTE.quiet};
+        border: 1px solid ${PALETTE.panelEdge}; border-radius: 10px;
+        padding: 12px 8px; font-size: 15px; font-family: inherit;
+        cursor: pointer; min-height: 48px;
+      }
+      .pl-seasonOn {
+        background: ${PALETTE.moss}; color: #06110E; font-weight: 600;
+        border-color: ${PALETTE.moss};
+      }
+      .pl-seasonNote {
+        max-width: 620px; margin: 0 auto 16px; font-size: 13.5px;
+        color: ${PALETTE.quiet};
+      }
+      .pl-checkedLine {
+        font-size: 14px; color: ${PALETTE.fresh}; margin: 8px 0 0;
+      }
+      .pl-coolNote {
+        font-size: 14px; line-height: 1.5; color: ${PALETTE.parch};
+        border-left: 2px solid ${PALETTE.panelEdge}; padding-left: 10px;
+        margin: 10px 0 0;
+      }
+      .pl-tagSmall {
+        font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+        color: ${PALETTE.quiet}; margin-left: 8px;
+      }
       .pl-flushSoon { font-size: 13.5px; color: ${PALETTE.quiet}; margin: 8px 0 0; }
       .pl-timer {
         margin-top: 12px; padding: 10px 12px; border-radius: 10px;
@@ -798,6 +1039,7 @@ function Style() {
         .pl-display { font-size: 30px; }
         .pl-actions { flex-direction: column; }
         .pl-actions .pl-primary, .pl-actions .pl-ghost, .pl-actions .pl-done { width: 100%; }
+        .pl-seasons { flex-wrap: wrap; }
         .pl-timer { flex-direction: column; align-items: flex-start; }
         .pl-timerBtns { width: 100%; }
         .pl-timerBtns .pl-ghost { flex: 1; }
@@ -806,6 +1048,7 @@ function Style() {
       }
       @media (prefers-reduced-motion: reduce) {
         .pl-meterFill { transition: none; }
+        .pl-cardFlash, .pl-confirm { animation: none; }
       }
     `}</style>
   );
