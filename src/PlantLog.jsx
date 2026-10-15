@@ -71,6 +71,11 @@ const hasStorage = () => typeof fetch === "function";
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// A learned interval can stretch to at most double the planned one and shrink
+// to at most half, so a run of odd readings can never strand a plant.
+const clampAdjust = (n, base) =>
+  Math.max(-Math.floor(base / 2), Math.min(base, Math.round(n || 0)));
+
 // Short physical confirmation that a tap registered.
 function confirmBlip(kind) {
   try {
@@ -238,11 +243,20 @@ export default function PlantLog() {
     }
   }
 
-  async function logCheck(groupId) {
+  async function logCheck(groupId, row) {
     const next = { ...log };
     const prior = (next[groupId] || []).filter(
       (e) => !(e.checked && e.date === today)
     );
+    // Still damp on the day it came due means the interval is running short.
+    // Nudge it out a day; the clamp keeps this from drifting forever.
+    if (row && row.remaining <= 0 && !row.checkedToday) {
+      const current = (next._adjust || {})[groupId] || 0;
+      next._adjust = {
+        ...(next._adjust || {}),
+        [groupId]: clampAdjust(current + 1, row.base),
+      };
+    }
     confirmAction(groupId, "checked");
     next[groupId] = [{ date: today, by: who, checked: true }, ...prior]
       .sort((a, b) => (a.date < b.date ? 1 : -1))
@@ -251,10 +265,18 @@ export default function PlantLog() {
     await persist(next);
   }
 
-  async function logWatering(groupId, when) {
+  async function logWatering(groupId, when, row) {
     if (!when) confirmAction(groupId, "watered");
     const stamp = { date: when || today, by: who };
     const next = { ...log };
+    // Watered early is the opposite signal: it dried out ahead of schedule.
+    if (!when && row && row.remaining > 0) {
+      const current = (next._adjust || {})[groupId] || 0;
+      next._adjust = {
+        ...(next._adjust || {}),
+        [groupId]: clampAdjust(current - 1, row.base),
+      };
+    }
     const prior = (next[groupId] || []).filter(
       (e) => !(e.date === stamp.date && !e.checked) && !(e.checked && e.date === stamp.date)
     );
@@ -301,6 +323,13 @@ export default function PlantLog() {
     await persist(next);
   }
 
+  async function resetAdjust(groupId) {
+    const next = { ...log, _adjust: { ...(log._adjust || {}) } };
+    delete next._adjust[groupId];
+    setLog(next);
+    await persist(next);
+  }
+
   async function retrySync() {
     await persist(log);
   }
@@ -340,6 +369,8 @@ export default function PlantLog() {
   }
 
   const mult = (SEASONS.find((x) => x.id === season) || SEASONS[0]).mult;
+  // Days added to (or taken off) a group's interval, learned from experience.
+  const adjust = log._adjust || {};
 
   const rows = GROUPS.map((g) => {
     const all = log[g.id] || [];
@@ -354,7 +385,8 @@ export default function PlantLog() {
     // An interval can be a single number or a repeating cycle, e.g. [2, 3].
     const cycle = Array.isArray(g.interval) ? g.interval : [g.interval];
     const base = cycle[history.length % cycle.length];
-    const interval = Math.max(1, Math.round(base * mult));
+    const adj = clampAdjust(adjust[g.id] || 0, base);
+    const interval = Math.max(1, Math.round(base * mult) + adj);
     const remaining = since === null ? -1 : interval - since;
     // Bottom-watering concentrates minerals, so every Nth round is a top flush.
     const nextIsFlush = g.flushEvery
@@ -365,7 +397,7 @@ export default function PlantLog() {
       : null;
     return {
       ...g, history, all, last, since, remaining, nextIsFlush, untilFlush,
-      interval, cycle, base, lastCheck, checkedToday,
+      interval, cycle, base, lastCheck, checkedToday, adj,
     };
   }).sort((a, b) => a.remaining - b.remaining);
 
@@ -377,7 +409,10 @@ export default function PlantLog() {
       )
     : rows;
 
-  const dueCount = rows.filter((r) => r.remaining <= 0).length;
+  // A group someone checked and found damp today is handled, not outstanding —
+  // the cards already go quiet, so the header has to agree with them.
+  const dueCount = rows.filter((r) => r.remaining <= 0 && !r.checkedToday).length;
+  const dampCount = rows.filter((r) => r.remaining <= 0 && r.checkedToday).length;
 
   return (
     <>
@@ -388,11 +423,21 @@ export default function PlantLog() {
             {fromKey(today).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
           </p>
           <h1 className="pl-display">
-            {dueCount === 0 ? "Everything's watered" : `${dueCount} ${dueCount === 1 ? "group needs" : "groups need"} water`}
+            {dueCount > 0
+              ? `${dueCount} ${dueCount === 1 ? "group needs" : "groups need"} water`
+              : dampCount > 0
+              ? "Nothing needs water"
+              : "Everything's watered"}
           </h1>
           <p className="pl-note">
             Logged in as {who}. The bar shows how much of each plant's window is left — always finger-test before you pour.
           </p>
+          {dampCount > 0 && (
+            <p className="pl-note pl-dampNote">
+              {dampCount === 1 ? "1 group was" : `${dampCount} groups were`} checked
+              today and found still damp.
+            </p>
+          )}
         </header>
 
         <div className="pl-seasons" role="group" aria-label="Season">
@@ -479,6 +524,12 @@ export default function PlantLog() {
                     {r.cycle.length > 1
                       ? `every ${r.cycle.join("–")} days (${r.interval} this round)`
                       : `every ${r.interval} days`}
+                    {r.adj !== 0 && (
+                      <span className="pl-learned">
+                        {" "}
+                        {r.adj > 0 ? `+${r.adj}` : r.adj} learned
+                      </span>
+                    )}
                   </span>
                   <span className="pl-dot">·</span>
                   <span className={r.water === "distilled" ? "pl-water pl-warn" : "pl-water"}>{r.water === "distilled"
@@ -539,14 +590,16 @@ export default function PlantLog() {
                 <div className="pl-actions">
                   <button
                     className={wateredToday ? "pl-done" : "pl-primary"}
-                    onClick={() => (wateredToday ? undo(r.id, r.last.date) : logWatering(r.id))}
+                    onClick={() =>
+                      wateredToday ? undo(r.id, r.last.date) : logWatering(r.id, null, r)
+                    }
                   >
                     {wateredToday ? `Watered today by ${r.last.by || "someone"} — undo` : "I watered this"}
                   </button>
                   {!wateredToday && (
                     <button
                       className="pl-ghost"
-                      onClick={() => logCheck(r.id)}
+                      onClick={() => logCheck(r.id, r)}
                       disabled={r.checkedToday}
                     >
                       {r.checkedToday ? "Still damp ✓" : "Still damp"}
@@ -561,6 +614,19 @@ export default function PlantLog() {
                 {open === r.id && (
                   <div className="pl-history">
                     <Strip history={r.history} interval={r.interval} today={today} />
+                    {r.adj !== 0 && (
+                      <div className="pl-learnedBox">
+                        <p className="pl-stripLabel">
+                          Planned every {r.base} days, now every {r.interval}.
+                          {r.adj > 0
+                            ? " Stretched because it kept coming up still damp."
+                            : " Pulled in because it kept getting watered early."}
+                        </p>
+                        <button className="pl-ghost pl-quick" onClick={() => resetAdjust(r.id)}>
+                          Reset to {Math.max(1, Math.round(r.base * mult))} days
+                        </button>
+                      </div>
+                    )}
                     <Backdate
                       today={today}
                       existing={r.history.map((e) => e.date)}
@@ -939,6 +1005,7 @@ function Style() {
         background: ${PALETTE.moss}; color: #06110E; font-weight: 600;
         border-color: ${PALETTE.moss};
       }
+      .pl-dampNote { color: ${PALETTE.fresh}; margin-top: 6px; }
       .pl-seasonNote {
         max-width: 620px; margin: 0 auto 16px; font-size: 13.5px;
         color: ${PALETTE.quiet};
@@ -1003,6 +1070,12 @@ function Style() {
         padding: 9px 0; border-bottom: 1px solid #0F201D;
       }
       .pl-by { color: ${PALETTE.quiet}; }
+      .pl-learned { color: ${PALETTE.parch}; }
+      .pl-learnedBox {
+        margin: 0 0 12px; padding: 12px; border-radius: 10px;
+        background: #0F211E; border: 1px solid ${PALETTE.panelEdge};
+      }
+      .pl-learnedBox .pl-quick { margin-top: 8px; width: 100%; }
       .pl-backdate {
         margin: 4px 0 14px; padding: 12px; border-radius: 10px;
         background: #0F211E; border: 1px solid ${PALETTE.panelEdge};
