@@ -5,6 +5,10 @@ import { getStore } from "@netlify/blobs";
 const store = () => getStore({ name: "plant-log", consistency: "strong" });
 
 const KEY = "entries";
+
+// Identity of a single log entry: the same day can hold both a watering and a
+// "still damp" check-in, and they are different records.
+const entryKey = (e) => `${e.date}|${e.checked ? "c" : "w"}`;
 const json = (body, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
@@ -34,12 +38,20 @@ export default async function handler(req) {
       const merged = { ...current };
 
       for (const [groupId, entries] of Object.entries(incoming)) {
-        if (!Array.isArray(entries)) continue;
-        const byDate = new Map();
-        for (const e of [...(current[groupId] || []), ...entries]) {
-          if (e && typeof e.date === "string") byDate.set(e.date, e);
+        // Keys starting with "_" are house-wide settings (e.g. _season),
+        // not entry lists: last write wins.
+        if (groupId.startsWith("_")) {
+          merged[groupId] = entries;
+          continue;
         }
-        merged[groupId] = [...byDate.values()]
+        if (!Array.isArray(entries)) continue;
+        // A watering and a check-in can share a date, so key on both or the
+        // two collapse into one and a real watering is lost.
+        const byKey = new Map();
+        for (const e of [...(current[groupId] || []), ...entries]) {
+          if (e && typeof e.date === "string") byKey.set(entryKey(e), e);
+        }
+        merged[groupId] = [...byKey.values()]
           .sort((a, b) => (a.date < b.date ? 1 : -1))
           .slice(0, 60);
       }
@@ -47,13 +59,15 @@ export default async function handler(req) {
       // A group present in the request but absent from it entirely means a
       // deletion; honour removals by trusting the client's list for that group.
       for (const groupId of Object.keys(incoming)) {
-        const clientDates = new Set((incoming[groupId] || []).map((e) => e.date));
+        if (groupId.startsWith("_")) continue;
+        if (!Array.isArray(incoming[groupId])) continue;
+        const clientKeys = new Set(incoming[groupId].map(entryKey));
         const serverOnly = (current[groupId] || []).filter(
-          (e) => !clientDates.has(e.date)
+          (e) => !clientKeys.has(entryKey(e))
         );
         // Keep server-only entries unless the client explicitly shrank the list
         // for this group by exactly the entries it removed this session.
-        if (incoming[groupId] && serverOnly.length && clientDates.size < (current[groupId] || []).length) {
+        if (serverOnly.length && clientKeys.size < (current[groupId] || []).length) {
           merged[groupId] = (incoming[groupId] || [])
             .sort((a, b) => (a.date < b.date ? 1 : -1))
             .slice(0, 60);
