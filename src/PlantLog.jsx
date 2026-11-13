@@ -24,22 +24,23 @@ const GROUPS = [
     },
   },
   {
+    // Keep this id: the history is keyed to it, whatever the plant is called.
     id: "venus-flytrap",
-    name: "Venus flytrap",
+    name: "Chompy",
     latin: "Dionaea muscipula",
-    aka: "flytrap",
-    detail: "terrarium cup, patio",
+    aka: "Venus flytrap",
+    detail: "outside, open to the rain",
     outdoor: true,
     interval: 2,
     water: "distilled",
-    check: "keep soil damp — stand the cup in 1/2 inch of distilled water",
+    check: "keep soil damp — rain counts; top up with distilled only if it dries",
     fall: {
       interval: 3,
-      check: "growth is slowing — keep damp, but drop the standing water to a shallow film",
+      check: "growth is slowing — rain usually covers it; no standing water in the cup",
     },
     winter: {
       interval: 5,
-      check: "dormant — barely damp, no standing water, and leave it outside for the cold",
+      check: "dormant — rain keeps him damp enough. Tip the cup out if water stands in it, and leave him out in the cold.",
     },
   },
   {
@@ -229,6 +230,35 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // A learned interval can stretch to at most double the planned one and shrink
 // to at most half, so a run of odd readings can never strand a plant.
+// The season lives in the shared log so the whole house agrees on it. This
+// device also keeps its own copy, so a reload still remembers the setting when
+// the shared log can't be reached, and a device that has never seen either
+// falls back to the calendar rather than always opening on summer.
+const seasonFromCalendar = () => {
+  const m = new Date().getMonth(); // 0 = January
+  if (m >= 10 || m <= 1) return "winter"; // Nov–Feb
+  if (m >= 8) return "fall"; // Sep–Oct
+  return "summer";
+};
+
+const rememberedSeason = () => {
+  try {
+    const v = localStorage.getItem("plant-log-season");
+    if (v && SEASONS.some((x) => x.id === v)) return v;
+  } catch {
+    /* storage unavailable */
+  }
+  return seasonFromCalendar();
+};
+
+const rememberSeason = (id) => {
+  try {
+    localStorage.setItem("plant-log-season", id);
+  } catch {
+    /* storage unavailable */
+  }
+};
+
 const absentOrResting = (r, season) =>
   r.absent ? `gone for ${season}` : `resting for ${season}`;
 
@@ -293,7 +323,7 @@ export default function PlantLog() {
   const [offline, setOffline] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [today, setToday] = useState(dateKey());
-  const [season, setSeason] = useState("summer");
+  const [season, setSeason] = useState(rememberedSeason);
   // After a tap, hold the list order and show a confirmation, so the card you
   // touched doesn't vanish out from under your finger as the list re-sorts.
   const [flash, setFlash] = useState(null);
@@ -320,7 +350,10 @@ export default function PlantLog() {
       try {
         const fresh = await api.get();
         if (!cancelled) {
-          if (fresh && fresh._season) setSeason(fresh._season);
+          if (fresh && fresh._season) {
+            setSeason(fresh._season);
+            rememberSeason(fresh._season);
+          }
           setLog(fresh || {});
           setOffline(false);
         }
@@ -367,7 +400,10 @@ export default function PlantLog() {
         entries = {};
         setOffline(true);
       }
-      if (entries && entries._season) setSeason(entries._season);
+      if (entries && entries._season) {
+        setSeason(entries._season);
+        rememberSeason(entries._season);
+      }
       setLog(entries || {});
       try {
         const w = localStorage.getItem("plant-log-who");
@@ -487,6 +523,9 @@ export default function PlantLog() {
 
   async function chooseSeason(id) {
     setSeason(id);
+    // Saved on this device first, so the choice survives a reload even if the
+    // shared write fails.
+    rememberSeason(id);
     const next = { ...log, _season: id };
     setLog(next);
     await persist(next);
