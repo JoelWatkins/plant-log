@@ -1,16 +1,161 @@
 import React, { useState, useEffect } from "react";
 
+// Each group carries its summer instruction plus whatever a cooler season
+// changes. The card shows the season's own wording — never the summer line
+// followed by a correction to it.
 const GROUPS = [
-  { id: "seed-planters", name: "Seed planters", latin: "wildflower mixes", aka: "Save the Bees + Bring Home the Butterflies", detail: "3 troughs on the patio, sown 8/30/26", coolNote: "Seedlings should be established now — they no longer need the daily surface watering.", interval: 1, water: "tap", check: "surface must never dry out — reseed round" },
-  { id: "venus-flytrap", name: "Venus flytrap", latin: "Dionaea muscipula", aka: "flytrap", detail: "terrarium cup, patio", coolNote: "Dormant Nov–Feb: keep barely damp, not standing in water, and leave it outdoors for the cold.", interval: 2, water: "distilled", check: "keep soil damp — stand the cup in 1/2 inch of distilled water" },
-  { id: "sweet-potato-vine", name: "Sweet potato vine", latin: "Ipomoea batatas", aka: "ornamental sweet potato, tuber vine", detail: "potted, patio", coolNote: "Collapses at the first cold snap. That is normal, not a watering failure.", interval: 2, water: "tap", check: "top 1 inch dry — wilts fast, recovers fast" },
-  { id: "fuchsia", name: "Fuchsia + ivy", latin: "Fuchsia sp. with Hedera helix", aka: "lady's eardrops, English ivy", detail: "sharing one pot", interval: [2, 3], water: "tap", check: "never let it dry out — water for the fuchsia, the ivy will cope" },
-  { id: "outdoor-spiders", name: "Outdoor spider plants", latin: "Chlorophytum comosum", aka: "airplane plant, ribbon plant", detail: "2 pots on the patio", interval: 4, water: "tap", check: "top 1 inch dry — top-water until it runs out the bottom" },
-  { id: "tradescantia", name: "Tradescantia", latin: "Tradescantia zebrina", aka: "wandering dude, inch plant, silver inch", detail: "hanging, bedroom", interval: 6, water: "tap", check: "top 1 inch dry — bottom-soak the pot 30 min, then drain fully", soak: 1800, flushEvery: 5 },
-  { id: "spider-indoor", name: "Curly spider plant", latin: "Chlorophytum comosum 'Bonnie'", aka: "spider ivy, airplane plant", detail: "hanging, bedroom window", interval: 8, water: "filtered", check: "top 1 inch dry — bottom-soak 20 min, then drain fully", soak: 1200, flushEvery: 4 },
-  { id: "money-tree", name: "Money tree", latin: "Pachira aquatica", aka: "Malabar chestnut, braided money plant", detail: "office window", interval: 12, water: "tap", check: "top 2 inches dry" },
-  { id: "string-of-hearts", name: "String of hearts", latin: "Ceropegia woodii", aka: "rosary vine, chain of hearts", detail: "hanging, bedroom", interval: 12, water: "tap", check: "bone dry, then wait a day — bottom-soak 15 min, drain well", soak: 900, flushEvery: 5 },
-  { id: "citrus", name: "Citrus trees", latin: "Citrus × limon, Citrus × sinensis", aka: "the lemon and the orange", detail: "back fence", coolNote: "Once winter rains are steady, stop watering entirely — overwatering is the main way established citrus dies.", interval: 14, water: "hose", check: "deep soak at the drip line, 30 min", soak: 1800 },
+  {
+    id: "seed-planters",
+    name: "Seed planters",
+    latin: "wildflower mixes",
+    aka: "Save the Bees + Bring Home the Butterflies",
+    detail: "3 troughs on the patio, sown 8/30/26",
+    outdoor: true,
+    interval: 1,
+    water: "tap",
+    check: "surface must never dry out — reseed round",
+    fall: {
+      interval: 4,
+      check: "seedlings are established — water when the top inch is dry",
+    },
+    winter: {
+      interval: 10,
+      check: "rain usually covers these — water only if two weeks pass dry",
+    },
+  },
+  {
+    id: "venus-flytrap",
+    name: "Venus flytrap",
+    latin: "Dionaea muscipula",
+    aka: "flytrap",
+    detail: "terrarium cup, patio",
+    outdoor: true,
+    interval: 2,
+    water: "distilled",
+    check: "keep soil damp — stand the cup in 1/2 inch of distilled water",
+    fall: {
+      interval: 3,
+      check: "growth is slowing — keep damp, but drop the standing water to a shallow film",
+    },
+    winter: {
+      interval: 5,
+      check: "dormant — barely damp, no standing water, and leave it outside for the cold",
+    },
+  },
+  {
+    id: "sweet-potato-vine",
+    name: "Sweet potato vine",
+    latin: "Ipomoea batatas",
+    aka: "ornamental sweet potato, tuber vine",
+    detail: "potted, patio",
+    outdoor: true,
+    interval: 2,
+    water: "tap",
+    check: "top 1 inch dry — wilts fast, recovers fast",
+    fall: { interval: 4, check: "top 1 inch dry — it drinks less as growth slows" },
+    winter: {
+      absent: true,
+      check: "gone for the season after the first cold snap — nothing to water; the tuber may resprout in spring",
+    },
+  },
+  {
+    id: "fuchsia",
+    name: "Fuchsia + ivy",
+    latin: "Fuchsia sp. with Hedera helix",
+    aka: "lady's eardrops, English ivy",
+    detail: "sharing one pot",
+    outdoor: true,
+    interval: [2, 3],
+    water: "tap",
+    check: "never let it dry out — water for the fuchsia, the ivy will cope",
+    fall: { interval: [4, 5], check: "top inch dry — the fuchsia still sets the pace" },
+    winter: {
+      interval: 7,
+      check: "barely moist is enough while it rests — water only when the top inch is dry",
+    },
+  },
+  {
+    id: "outdoor-spiders",
+    name: "Outdoor spider plants",
+    latin: "Chlorophytum comosum",
+    aka: "airplane plant, ribbon plant",
+    detail: "2 pots on the patio",
+    outdoor: true,
+    interval: 4,
+    water: "tap",
+    check: "top 1 inch dry — top-water until it runs out the bottom",
+    winter: {
+      interval: 10,
+      check: "top inch dry — check the pots after rain before you pour",
+    },
+  },
+  {
+    id: "tradescantia",
+    name: "Tradescantia",
+    latin: "Tradescantia zebrina",
+    aka: "wandering dude, inch plant, silver inch",
+    detail: "hanging, bedroom",
+    interval: 6,
+    water: "tap",
+    check: "top 1 inch dry — bottom-soak the pot 30 min, then drain fully",
+    soak: 1800,
+    flushEvery: 5,
+  },
+  {
+    id: "spider-indoor",
+    name: "Curly spider plant",
+    latin: "Chlorophytum comosum 'Bonnie'",
+    aka: "spider ivy, airplane plant",
+    detail: "hanging, bedroom window",
+    interval: 8,
+    water: "filtered",
+    check: "top 1 inch dry — bottom-soak 20 min, then drain fully",
+    soak: 1200,
+    flushEvery: 4,
+  },
+  {
+    id: "money-tree",
+    name: "Money tree",
+    latin: "Pachira aquatica",
+    aka: "Malabar chestnut, braided money plant",
+    detail: "office window",
+    interval: 12,
+    water: "tap",
+    check: "top 2 inches dry",
+    winter: { check: "top 3 inches dry — it uses very little while the light is low" },
+  },
+  {
+    id: "string-of-hearts",
+    name: "String of hearts",
+    latin: "Ceropegia woodii",
+    aka: "rosary vine, chain of hearts",
+    detail: "hanging, bedroom",
+    interval: 12,
+    water: "tap",
+    check: "bone dry, then wait a day — bottom-soak 15 min, drain well",
+    soak: 900,
+    flushEvery: 5,
+    winter: {
+      check: "bone dry for several days first — a 10-minute soak is plenty",
+      soak: 600,
+    },
+  },
+  {
+    id: "citrus",
+    name: "Citrus trees",
+    latin: "Citrus × limon, Citrus × sinensis",
+    aka: "the lemon and the orange",
+    detail: "back fence",
+    outdoor: true,
+    interval: 14,
+    water: "hose",
+    check: "deep soak at the drip line, 30 min",
+    soak: 1800,
+    winter: {
+      resting: true,
+      check: "rain covers these — don't water. Only if three weeks pass dry, give one deep soak.",
+    },
+  },
 ];
 
 const SEASONS = [
@@ -62,7 +207,18 @@ const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(entries),
     });
-    if (!r.ok) throw new Error(`PUT /api/log ${r.status}`);
+    if (!r.ok) {
+      // Carry the server's own message through, so a failure says what broke
+      // instead of just "couldn't save".
+      let detail = "";
+      try {
+        const body = await r.json();
+        if (body && body.error) detail = `: ${body.error}`;
+      } catch {
+        /* not JSON */
+      }
+      throw new Error(`saving failed (${r.status})${detail}`);
+    }
     return r.json();
   },
 };
@@ -73,6 +229,9 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // A learned interval can stretch to at most double the planned one and shrink
 // to at most half, so a run of odd readings can never strand a plant.
+const absentOrResting = (r, season) =>
+  r.absent ? `gone for ${season}` : `resting for ${season}`;
+
 const clampAdjust = (n, base) =>
   Math.max(-Math.floor(base / 2), Math.min(base, Math.round(n || 0)));
 
@@ -138,11 +297,19 @@ export default function PlantLog() {
   // After a tap, hold the list order and show a confirmation, so the card you
   // touched doesn't vanish out from under your finger as the list re-sorts.
   const [flash, setFlash] = useState(null);
+  const [rainOpen, setRainOpen] = useState(false);
+  const [rainPick, setRainPick] = useState({});
+  const [rainDay, setRainDay] = useState("today");
+  const [rainFlash, setRainFlash] = useState("");
+  const rainTimer = React.useRef(null);
   const [frozenOrder, setFrozenOrder] = useState(null);
   const orderRef = React.useRef([]);
   const flashTimer = React.useRef(null);
 
-  useEffect(() => () => clearTimeout(flashTimer.current), []);
+  useEffect(() => () => {
+    clearTimeout(flashTimer.current);
+    clearTimeout(rainTimer.current);
+  }, []);
 
   // Pull in other people's waterings periodically and on refocus, so two
   // housemates with the app open don't work from stale counts.
@@ -236,8 +403,9 @@ export default function PlantLog() {
       await withRetry(() => api.set(next));
       setOffline(false);
       setStatus("");
-    } catch {
+    } catch (e) {
       setOffline(true);
+      setStatus(e && e.message ? e.message : "");
     } finally {
       setSyncing(false);
     }
@@ -265,12 +433,13 @@ export default function PlantLog() {
     await persist(next);
   }
 
-  async function logWatering(groupId, when, row) {
+  async function logWatering(groupId, when, row, fromRain) {
     if (!when) confirmAction(groupId, "watered");
     const stamp = { date: when || today, by: who };
     const next = { ...log };
     // Watered early is the opposite signal: it dried out ahead of schedule.
-    if (!when && row && row.remaining > 0) {
+    // Rain is not that signal — it falls on its own schedule, not the plant's.
+    if (!when && row && row.remaining > 0 && !fromRain) {
       const current = (next._adjust || {})[groupId] || 0;
       next._adjust = {
         ...(next._adjust || {}),
@@ -320,6 +489,53 @@ export default function PlantLog() {
     setSeason(id);
     const next = { ...log, _season: id };
     setLog(next);
+    await persist(next);
+  }
+
+  function openRain(rows) {
+    const pick = {};
+    for (const r of rows) {
+      if (r.outdoor) pick[r.id] = !r.absent;
+    }
+    setRainPick(pick);
+    setRainDay("today");
+    setRainOpen(true);
+  }
+
+  async function logRain(rows) {
+    const date =
+      rainDay === "yesterday" ? dateKey(new Date(fromKey(today) - DAY)) : today;
+    const chosen = rows.filter((r) => r.outdoor && rainPick[r.id]);
+    if (!chosen.length) {
+      setRainOpen(false);
+      return;
+    }
+
+    const next = { ...log };
+    for (const r of chosen) {
+      const prior = (next[r.id] || []).filter((e) => !(e.date === date && !e.checked));
+      next[r.id] = [{ date, by: who, rain: true }, ...prior]
+        .sort((a, b) => (a.date < b.date ? 1 : -1))
+        .slice(0, 60);
+    }
+
+    // Hold the order while the confirmation shows, as a single tap can move
+    // half the list at once.
+    setFrozenOrder(orderRef.current);
+    setRainOpen(false);
+    setLog(next);
+    confirmBlip("watered");
+    setRainFlash(
+      `Rain logged for ${chosen.length} outdoor ${
+        chosen.length === 1 ? "group" : "groups"
+      }${rainDay === "yesterday" ? " (yesterday)" : ""}.`
+    );
+    clearTimeout(rainTimer.current);
+    rainTimer.current = setTimeout(() => {
+      setRainFlash("");
+      setFrozenOrder(null);
+    }, 3200);
+
     await persist(next);
   }
 
@@ -373,6 +589,19 @@ export default function PlantLog() {
   const adjust = log._adjust || {};
 
   const rows = GROUPS.map((g) => {
+    // The season's own entry replaces the summer wording outright, so a card
+    // never shows a summer instruction with a correction stapled underneath.
+    const sv = g[season] || {};
+    const check = sv.check !== undefined ? sv.check : g.check;
+    const soak = sv.soak !== undefined ? sv.soak : g.soak;
+    // "absent" means the plant isn't there this season at all; "resting" just
+    // means it's off the schedule. Both skip the countdown, but rain still
+    // matters to a resting plant and means nothing to an absent one.
+    const absent = !!sv.absent;
+    const resting = absent || !!sv.resting;
+    // A season that names its own interval means it outright; only a season
+    // without one falls back to stretching the summer figure.
+    const seasonInterval = sv.interval !== undefined ? sv.interval : null;
     const all = log[g.id] || [];
     // A check-in records that someone looked and the soil was still damp.
     // It never resets the watering clock or advances the flush count.
@@ -383,11 +612,14 @@ export default function PlantLog() {
     const last = history[0];
     const since = last ? daysBetween(last.date, today) : null;
     // An interval can be a single number or a repeating cycle, e.g. [2, 3].
-    const cycle = Array.isArray(g.interval) ? g.interval : [g.interval];
+    const source = seasonInterval !== null ? seasonInterval : g.interval;
+    const cycle = Array.isArray(source) ? source : [source];
     const base = cycle[history.length % cycle.length];
     const adj = clampAdjust(adjust[g.id] || 0, base);
-    const interval = Math.max(1, Math.round(base * mult) + adj);
-    const remaining = since === null ? -1 : interval - since;
+    const planned =
+      seasonInterval !== null ? base : Math.round(base * mult);
+    const interval = Math.max(1, planned + adj);
+    const remaining = resting || since === null ? -1 : interval - since;
     // Bottom-watering concentrates minerals, so every Nth round is a top flush.
     const nextIsFlush = g.flushEvery
       ? (history.length + 1) % g.flushEvery === 0
@@ -398,8 +630,13 @@ export default function PlantLog() {
     return {
       ...g, history, all, last, since, remaining, nextIsFlush, untilFlush,
       interval, cycle, base, lastCheck, checkedToday, adj,
+      check, soak, resting, absent, planned,
     };
-  }).sort((a, b) => a.remaining - b.remaining);
+  }).sort((a, b) => {
+    // A resting plant has nothing to do, so it sits below the live ones.
+    if (a.resting !== b.resting) return a.resting ? 1 : -1;
+    return a.remaining - b.remaining;
+  });
 
   // Remember the natural order for the next tap, then apply the frozen one.
   orderRef.current = rows.map((r) => r.id);
@@ -411,8 +648,8 @@ export default function PlantLog() {
 
   // A group someone checked and found damp today is handled, not outstanding —
   // the cards already go quiet, so the header has to agree with them.
-  const dueCount = rows.filter((r) => r.remaining <= 0 && !r.checkedToday).length;
-  const dampCount = rows.filter((r) => r.remaining <= 0 && r.checkedToday).length;
+  const dueCount = rows.filter((r) => !r.resting && r.remaining <= 0 && !r.checkedToday).length;
+  const dampCount = rows.filter((r) => !r.resting && r.remaining <= 0 && r.checkedToday).length;
 
   return (
     <>
@@ -453,8 +690,69 @@ export default function PlantLog() {
         </div>
         {season !== "summer" && (
           <p className="pl-seasonNote">
-            Intervals stretched {mult}× for {season}. Everyone sees this setting.
+            On the {season} schedule. Everyone sees this setting.
           </p>
+        )}
+
+        {rainFlash ? (
+          <div className="pl-confirm pl-rainConfirm" role="status">
+            <span className="pl-confirmMark">✓</span>
+            <span>{rainFlash}</span>
+          </div>
+        ) : rainOpen ? (
+          <div className="pl-rainPanel">
+            <p className="pl-stripLabel">
+              Which outdoor pots actually caught it? Anything under the eaves may
+              have stayed dry.
+            </p>
+            {rows
+              .filter((r) => r.outdoor)
+              .map((r) => (
+                <label key={r.id} className="pl-rainRow">
+                  <input
+                    type="checkbox"
+                    checked={!!rainPick[r.id]}
+                    onChange={(e) =>
+                      setRainPick({ ...rainPick, [r.id]: e.target.checked })
+                    }
+                  />
+                  <span>
+                    {r.name}
+                    <span className="pl-rainWhere">
+                      {" "}
+                      — {r.detail}
+                      {r.absent ? ", not there now" : r.resting ? ", resting" : ""}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            <div className="pl-rainWhen">
+              {[
+                { id: "today", label: "Today" },
+                { id: "yesterday", label: "Overnight / yesterday" },
+              ].map((d) => (
+                <button
+                  key={d.id}
+                  className={d.id === rainDay ? "pl-season pl-seasonOn" : "pl-season"}
+                  onClick={() => setRainDay(d.id)}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+            <div className="pl-rainActions">
+              <button className="pl-primary" onClick={() => logRain(rows)}>
+                Log the rain
+              </button>
+              <button className="pl-ghost" onClick={() => setRainOpen(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button className="pl-rainBtn" onClick={() => openRain(rows)}>
+            It rained — covers the {rows.filter((r) => r.outdoor).length} outdoor groups
+          </button>
         )}
 
         {offline && (
@@ -462,6 +760,7 @@ export default function PlantLog() {
             <p className="pl-statusText">
               Can't reach the shared log right now. Your taps are recorded in this
               window, but housemates won't see them until the connection is back.
+              {status ? ` (${status})` : ""}
             </p>
             <button className="pl-ghost" onClick={retrySync} disabled={syncing}>
               {syncing ? "Retrying…" : "Retry sync"}
@@ -475,7 +774,9 @@ export default function PlantLog() {
             const pct =
               r.since === null ? 0 : Math.max(0, Math.min(1, 1 - r.since / r.interval));
             const tone =
-              r.checkedToday && r.remaining <= 0
+              r.resting
+                ? PALETTE.quiet
+                : r.checkedToday && r.remaining <= 0
                 ? PALETTE.moss
                 : r.remaining <= 0
                 ? PALETTE.dry
@@ -497,7 +798,9 @@ export default function PlantLog() {
                     <p className="pl-detail">{r.detail}</p>
                   </div>
                   <span className="pl-tag" style={{ color: tone, borderColor: tone }}>
-                    {r.checkedToday && r.remaining <= 0
+                    {r.resting
+                      ? absentOrResting(r, season)
+                      : r.checkedToday && r.remaining <= 0
                       ? "checked today"
                       : r.since === null
                       ? "no record"
@@ -509,28 +812,36 @@ export default function PlantLog() {
                   </span>
                 </div>
 
+                {!r.resting && (
                 <div className="pl-meter" aria-hidden="true">
                   <div className="pl-meterFill" style={{ width: `${pct * 100}%`, background: tone }} />
                 </div>
+                )}
 
                 <div className="pl-meta">
                   <span>
                     {r.last
-                      ? `Last watered ${r.since === 0 ? "today" : r.since === 1 ? "yesterday" : `${r.since} days ago`}${r.last.by ? ` by ${r.last.by}` : ""}`
+                      ? `Last ${r.last.rain ? "rained on" : "watered"} ${
+                          r.since === 0 ? "today" : r.since === 1 ? "yesterday" : `${r.since} days ago`
+                        }${r.last.rain ? "" : r.last.by ? ` by ${r.last.by}` : ""}`
                       : "Never logged"}
                   </span>
                   <span className="pl-dot">·</span>
-                  <span>
-                    {r.cycle.length > 1
-                      ? `every ${r.cycle.join("–")} days (${r.interval} this round)`
-                      : `every ${r.interval} days`}
-                    {r.adj !== 0 && (
-                      <span className="pl-learned">
-                        {" "}
-                        {r.adj > 0 ? `+${r.adj}` : r.adj} learned
-                      </span>
-                    )}
-                  </span>
+                  {r.resting ? (
+                    <span>no watering this season</span>
+                  ) : (
+                    <span>
+                      {r.cycle.length > 1
+                        ? `every ${r.cycle.join("–")} days (${r.interval} this round)`
+                        : `every ${r.interval} days`}
+                      {r.adj !== 0 && (
+                        <span className="pl-learned">
+                          {" "}
+                          {r.adj > 0 ? `+${r.adj}` : r.adj} learned
+                        </span>
+                      )}
+                    </span>
+                  )}
                   <span className="pl-dot">·</span>
                   <span className={r.water === "distilled" ? "pl-water pl-warn" : "pl-water"}>{r.water === "distilled"
                       ? "DISTILLED OR RAINWATER ONLY — tap water kills it"
@@ -551,10 +862,6 @@ export default function PlantLog() {
 
                 <p className="pl-check">Check: {r.check}</p>
 
-                {r.coolNote && season !== "summer" && (
-                  <p className="pl-coolNote">{r.coolNote}</p>
-                )}
-
                 {r.flushEvery && (
                   r.nextIsFlush ? (
                     <p className="pl-flush">
@@ -569,7 +876,7 @@ export default function PlantLog() {
                   )
                 )}
 
-                {r.soak && !r.nextIsFlush && (
+                {r.soak && !r.resting && !r.nextIsFlush && (
                   <SoakTimer
                     id={r.id}
                     seconds={r.soak}
@@ -589,14 +896,18 @@ export default function PlantLog() {
                 ) : (
                 <div className="pl-actions">
                   <button
-                    className={wateredToday ? "pl-done" : "pl-primary"}
+                    className={wateredToday || r.resting ? "pl-done" : "pl-primary"}
                     onClick={() =>
                       wateredToday ? undo(r.id, r.last.date) : logWatering(r.id, null, r)
                     }
                   >
-                    {wateredToday ? `Watered today by ${r.last.by || "someone"} — undo` : "I watered this"}
+                    {wateredToday
+                      ? `Watered today by ${r.last.by || "someone"} — undo`
+                      : r.resting
+                      ? "Log a watering anyway"
+                      : "I watered this"}
                   </button>
-                  {!wateredToday && (
+                  {!wateredToday && !r.resting && (
                     <button
                       className="pl-ghost"
                       onClick={() => logCheck(r.id, r)}
@@ -617,13 +928,13 @@ export default function PlantLog() {
                     {r.adj !== 0 && (
                       <div className="pl-learnedBox">
                         <p className="pl-stripLabel">
-                          Planned every {r.base} days, now every {r.interval}.
+                          Planned every {Math.max(1, r.planned)} days, now every {r.interval}.
                           {r.adj > 0
                             ? " Stretched because it kept coming up still damp."
                             : " Pulled in because it kept getting watered early."}
                         </p>
                         <button className="pl-ghost pl-quick" onClick={() => resetAdjust(r.id)}>
-                          Reset to {Math.max(1, Math.round(r.base * mult))} days
+                          Reset to {Math.max(1, r.planned)} days
                         </button>
                       </div>
                     )}
@@ -641,6 +952,7 @@ export default function PlantLog() {
                             <span>
                               {fmt(e.date)}
                               {e.checked && <span className="pl-tagSmall">checked</span>}
+                              {e.rain && <span className="pl-tagSmall">rain</span>}
                             </span>
                             <span className="pl-entryRight">
                               <span className="pl-by">{e.by || "unsigned"}</span>
@@ -992,6 +1304,30 @@ function Style() {
         width: 26px; height: 26px; flex-shrink: 0; border-radius: 999px;
         background: ${PALETTE.moss}; color: #06110E; font-size: 16px;
       }
+      .pl-rainBtn {
+        display: block; width: 100%; max-width: 620px; margin: 0 auto 16px;
+        box-sizing: border-box; background: ${PALETTE.panel};
+        color: ${PALETTE.mist}; border: 1px solid ${PALETTE.panelEdge};
+        border-radius: 10px; padding: 15px 16px; min-height: 50px;
+        font-size: 16px; font-family: inherit; cursor: pointer;
+      }
+      .pl-rainBtn:hover { border-color: ${PALETTE.moss}; color: #F2FBF4; }
+      .pl-rainPanel {
+        max-width: 620px; margin: 0 auto 16px; padding: 16px;
+        box-sizing: border-box; border-radius: 12px;
+        background: ${PALETTE.panel}; border: 1px solid ${PALETTE.moss};
+      }
+      .pl-rainRow {
+        display: flex; align-items: flex-start; gap: 10px;
+        padding: 10px 0; font-size: 15.5px; color: ${PALETTE.mist};
+        border-bottom: 1px solid #0F201D; cursor: pointer;
+      }
+      .pl-rainRow input { width: 22px; height: 22px; flex-shrink: 0; margin: 0; }
+      .pl-rainWhere { color: ${PALETTE.quiet}; font-size: 14px; }
+      .pl-rainWhen { display: flex; gap: 6px; margin-top: 12px; }
+      .pl-rainActions { display: flex; gap: 8px; margin-top: 12px; }
+      .pl-rainActions .pl-primary { flex: 1; }
+      .pl-rainConfirm { max-width: 620px; margin: 0 auto 16px; }
       .pl-seasons {
         max-width: 620px; margin: 0 auto 10px; display: flex; gap: 6px;
       }
@@ -1012,11 +1348,6 @@ function Style() {
       }
       .pl-checkedLine {
         font-size: 14px; color: ${PALETTE.fresh}; margin: 8px 0 0;
-      }
-      .pl-coolNote {
-        font-size: 14px; line-height: 1.5; color: ${PALETTE.parch};
-        border-left: 2px solid ${PALETTE.panelEdge}; padding-left: 10px;
-        margin: 10px 0 0;
       }
       .pl-tagSmall {
         font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
@@ -1113,6 +1444,9 @@ function Style() {
         .pl-actions { flex-direction: column; }
         .pl-actions .pl-primary, .pl-actions .pl-ghost, .pl-actions .pl-done { width: 100%; }
         .pl-seasons { flex-wrap: wrap; }
+        .pl-rainWhen { flex-direction: column; }
+        .pl-rainActions { flex-direction: column; }
+        .pl-rainActions .pl-primary, .pl-rainActions .pl-ghost { width: 100%; }
         .pl-timer { flex-direction: column; align-items: flex-start; }
         .pl-timerBtns { width: 100%; }
         .pl-timerBtns .pl-ghost { flex: 1; }
