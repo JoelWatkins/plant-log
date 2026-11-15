@@ -24,6 +24,24 @@ const GROUPS = [
     },
   },
   {
+    id: "rain-shoot",
+    name: "Rain shoot",
+    latin: "unidentified",
+    aka: "the pink spear",
+    detail: "patio pot — came up on its own when the rains started, Nov 2026",
+    outdoor: true,
+    // Explicit intervals in every season: the multiplier assumes a summer
+    // grower, and this one started growing in November.
+    interval: 5,
+    water: "tap",
+    check: "top inch dry — it's actively growing, so don't let it dry out. Rain usually covers it. Don't feed it yet.",
+    fall: { interval: 5 },
+    winter: {
+      interval: 5,
+      check: "top inch dry — growing now, so keep it going. Rain usually covers it. Don't feed it yet.",
+    },
+  },
+  {
     // Keep this id: the history is keyed to it, whatever the plant is called.
     id: "venus-flytrap",
     name: "Chompy",
@@ -44,20 +62,20 @@ const GROUPS = [
     },
   },
   {
+    // Keep this id — the watering history is keyed to it. Identified from the
+    // foliage as an ornamental sweet potato, but it was dug up in Nov 2026 with
+    // no tuber at all, which rules that out. Fibrous roots on a woody stem:
+    // most likely a self-sown annual vine, morning glory or similar.
     id: "sweet-potato-vine",
-    name: "Sweet potato vine",
-    latin: "Ipomoea batatas",
-    aka: "ornamental sweet potato, tuber vine",
-    detail: "potted, patio",
+    name: "Mystery vine",
+    latin: "unidentified — not Ipomoea batatas",
+    aka: "once filed as sweet potato vine",
+    detail: "patio planter, nothing growing now",
     outdoor: true,
+    absent: true,
     interval: 2,
     water: "tap",
-    check: "top 1 inch dry — wilts fast, recovers fast",
-    fall: { interval: 4, check: "top 1 inch dry — it drinks less as growth slows" },
-    winter: {
-      absent: true,
-      check: "gone for the season after the first cold snap — nothing to water; the tuber may resprout in spring",
-    },
+    check: "dug up Nov 2026 — fibrous roots, no tuber, so nothing will resprout from it. Watch the planter in spring: heart-shaped seedlings mean it self-sowed, and morning glory gets weedy if you let it run.",
   },
   {
     id: "fuchsia",
@@ -636,7 +654,7 @@ export default function PlantLog() {
     // "absent" means the plant isn't there this season at all; "resting" just
     // means it's off the schedule. Both skip the countdown, but rain still
     // matters to a resting plant and means nothing to an absent one.
-    const absent = !!sv.absent;
+    const absent = !!(sv.absent || g.absent);
     const resting = absent || !!sv.resting;
     // A season that names its own interval means it outright; only a season
     // without one falls back to stretching the summer figure.
